@@ -16,20 +16,108 @@ const fs = require("fs");
 const csv = require("csv-parser");
 const md5 = require("md5");
 const createCsvWriter = require("csv-writer").createObjectCsvWriter;
+var geoip = require("geoip-lite");
 
 const objIpBinary = require("./objIpBinary");
 
 var oIpBin = new objIpBinary();
+var geoMap = new Map();
 
 (async () => {
   console.log("Welcome to Geo location compression and testing");
+  logMemoryUsage();
 
+  var ip = "172.105.189.15";
+  var geo = geoip.lookup(ip);
+
+  console.log(geo);
+  logMemoryUsage();
   //created geoCompress.json
   //var geoLocationIp = await readCSVtoArray("GeoLite2-City-Blocks-IPv4.csv");
   //processGeoIpv4(geoLocationIp);
+  geoLocationCompressJsonLoad();
+  await createGeoCityIdMap();
+  logMemoryUsage();
 
-  var geocityIds = await readCSVtoArray("GeoLite2-City-Locations-en.csv");
+  console.log(oIpBin.contains("192.0.2.50"));
+  console.log(oIpBin.contains("172.105.189.15"));
+
+  const start = process.hrtime();
+  var ipTest = oIpBin.contains("172.105.189.15");
+
+  if (ipTest != null) {
+    if (geoMap.has(ipTest["data"])) {
+      console.log(geoMap.get(ipTest["data"]));
+    }
+  }
+
+  const diff = process.hrtime(start);
+  const elapsed = diff[0] * 1000 + diff[1] / 1e6; // Time in milliseconds
+
+  console.log(`Elapsed time: ${elapsed} ms`);
+
+  // Wait for 10 seconds
+  //await delay(10000);
+  /*
+oIpBin.insert('192.0.2.0/24', { name: 'Range 1', data: 'Some data' });
+oIpBin.insert('203.0.113.0/24', { name: 'Range 2', data: 'Some other data' });
+console.log(oIpBin.contains('192.0.2.50'));  // { range: '192.0.2.0/24', data: { name: 'Range 1', data: 'Some data' } }
+console.log(oIpBin.contains('203.0.113.50'));  // { range: '203.0.113.0/24', data: { name: 'Range 2', data: 'Some other data' } }
+console.log(oIpBin.contains('198.51.100.50'));*/
 })();
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function logMemoryUsage() {
+  const usage = process.memoryUsage();
+  const rss = Math.round((usage.rss / 1024 / 1024) * 100) / 100;
+  const heapTotal = Math.round((usage.heapTotal / 1024 / 1024) * 100) / 100;
+  const heapUsed = Math.round((usage.heapUsed / 1024 / 1024) * 100) / 100;
+  const external = Math.round((usage.external / 1024 / 1024) * 100) / 100;
+
+  console.log(
+    `Memory usage: rss ${rss}MB, heapTotal ${heapTotal}MB, heapUsed ${heapUsed}MB, external ${external}MB`
+  );
+}
+
+async function createGeoCityIdMap() {
+  var geocityIds = await readCSVtoArray("GeoLite2-City-Locations-en.csv");
+
+  for (var c in geocityIds) {
+    //console.log(geocityIds[c]);
+    if (geoMap.has(geocityIds[c]["geoname_id"])) {
+      console.log("found dup");
+    }
+    geoMap.set(geocityIds[c]["geoname_id"], geocityIds[c]);
+  }
+}
+
+function geoLocationCompressJsonLoad() {
+  var geoIpCompress = jsonFileToMap("geoCompress.json");
+  //console.log(geoIpCompress);
+
+  //load into ipBin testing
+  for (let [key, value] of geoIpCompress) {
+    for (var i in value) {
+      oIpBin.insert(value[i], key);
+    }
+  }
+}
+
+function jsonFileToMap(filePath) {
+  // Read the file
+  const json = fs.readFileSync(filePath, "utf8");
+
+  // Parse the JSON content
+  const obj = JSON.parse(json);
+
+  // Convert the object to a Map
+  const map = new Map(Object.entries(obj));
+
+  return map;
+}
 
 function readCSVtoArray(filePath) {
   return new Promise((resolve, reject) => {
